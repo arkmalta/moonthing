@@ -2,10 +2,10 @@ CMakeFiles/realsense2_camera.dir/src/sensor_params.cpp.o: \
  /home/matt/Desktop/luna/src/realsense-ros/realsense2_camera/src/sensor_params.cpp \
  /usr/include/stdc-predef.h \
  /home/matt/Desktop/luna/src/realsense-ros/realsense2_camera/include/sensor_params.h \
- /usr/local/include/librealsense2/rs.hpp \
- /usr/local/include/librealsense2/rs.h \
- /usr/local/include/librealsense2/rsutil.h /usr/include/c++/11/stdlib.h \
- /usr/include/c++/11/cstdlib \
+ /opt/ros/humble/include/librealsense2/rs.hpp \
+ /opt/ros/humble/include/librealsense2/rs.h \
+ /opt/ros/humble/include/librealsense2/rsutil.h \
+ /usr/include/c++/11/stdlib.h /usr/include/c++/11/cstdlib \
  /usr/include/x86_64-linux-gnu/c++/11/bits/c++config.h \
  /usr/include/x86_64-linux-gnu/c++/11/bits/os_defines.h \
  /usr/include/features.h /usr/include/features-time64.h \
@@ -98,27 +98,27 @@ CMakeFiles/realsense2_camera.dir/src/sensor_params.cpp.o: \
  /usr/include/c++/11/tr1/poly_laguerre.tcc \
  /usr/include/c++/11/tr1/riemann_zeta.tcc \
  /usr/lib/gcc/x86_64-linux-gnu/11/include/float.h \
- /usr/local/include/librealsense2/h/rs_types.h \
- /usr/local/include/librealsense2/h/rs_sensor.h \
- /usr/local/include/librealsense2/h/rs_types.h \
- /usr/local/include/librealsense2/h/rs_context.h \
- /usr/local/include/librealsense2/h/rs_device.h \
- /usr/local/include/librealsense2/h/rs_sensor.h \
- /usr/local/include/librealsense2/h/rs_frame.h \
- /usr/local/include/librealsense2/h/rs_option.h \
- /usr/local/include/librealsense2/h/rs_processing.h \
- /usr/local/include/librealsense2/h/rs_option.h \
- /usr/local/include/librealsense2/h/rs_record_playback.h \
- /usr/local/include/librealsense2/hpp/rs_types.hpp \
- /usr/local/include/librealsense2/rs.h \
- /usr/local/include/librealsense2/h/rs_context.h \
- /usr/local/include/librealsense2/h/rs_device.h \
- /usr/local/include/librealsense2/h/rs_frame.h \
- /usr/local/include/librealsense2/h/rs_processing.h \
- /usr/local/include/librealsense2/h/rs_record_playback.h \
- /usr/local/include/librealsense2/h/rs_sensor.h \
- /usr/local/include/librealsense2/h/rs_pipeline.h \
- /usr/local/include/librealsense2/h/rs_config.h \
+ /opt/ros/humble/include/librealsense2/h/rs_types.h \
+ /opt/ros/humble/include/librealsense2/h/rs_sensor.h \
+ /opt/ros/humble/include/librealsense2/h/rs_types.h \
+ /opt/ros/humble/include/librealsense2/h/rs_context.h \
+ /opt/ros/humble/include/librealsense2/h/rs_device.h \
+ /opt/ros/humble/include/librealsense2/h/rs_sensor.h \
+ /opt/ros/humble/include/librealsense2/h/rs_frame.h \
+ /opt/ros/humble/include/librealsense2/h/rs_option.h \
+ /opt/ros/humble/include/librealsense2/h/rs_processing.h \
+ /opt/ros/humble/include/librealsense2/h/rs_option.h \
+ /opt/ros/humble/include/librealsense2/h/rs_record_playback.h \
+ /opt/ros/humble/include/librealsense2/hpp/rs_types.hpp \
+ /opt/ros/humble/include/librealsense2/rs.h \
+ /opt/ros/humble/include/librealsense2/h/rs_context.h \
+ /opt/ros/humble/include/librealsense2/h/rs_device.h \
+ /opt/ros/humble/include/librealsense2/h/rs_frame.h \
+ /opt/ros/humble/include/librealsense2/h/rs_processing.h \
+ /opt/ros/humble/include/librealsense2/h/rs_record_playback.h \
+ /opt/ros/humble/include/librealsense2/h/rs_sensor.h \
+ /opt/ros/humble/include/librealsense2/h/rs_pipeline.h \
+ /opt/ros/humble/include/librealsense2/h/rs_config.h \
  /usr/include/c++/11/string /usr/include/c++/11/bits/stringfwd.h \
  /usr/include/c++/11/bits/memoryfwd.h \
  /usr/include/c++/11/bits/char_traits.h \
@@ -239,25 +239,25 @@ CMakeFiles/realsense2_camera.dir/src/sensor_params.cpp.o: \
  /usr/include/c++/11/bits/sstream.tcc /usr/include/c++/11/chrono \
  /usr/include/c++/11/ratio /usr/include/c++/11/ctime \
  /usr/include/c++/11/bits/parse_numbers.h \
- /usr/local/include/librealsense2/hpp/rs_context.hpp \
- /usr/local/include/librealsense2/hpp/rs_types.hpp \
- /usr/local/include/librealsense2/hpp/rs_record_playback.hpp \
- /usr/local/include/librealsense2/hpp/rs_device.hpp \
- /usr/local/include/librealsense2/hpp/rs_sensor.hpp \
- /usr/local/include/librealsense2/hpp/rs_frame.hpp \
- /usr/local/include/librealsense2/hpp/rs_processing.hpp \
- /usr/local/include/librealsense2/hpp/rs_options.hpp \
- /usr/local/include/librealsense2/h/rs_types.h \
+ /opt/ros/humble/include/librealsense2/hpp/rs_context.hpp \
+ /opt/ros/humble/include/librealsense2/hpp/rs_types.hpp \
+ /opt/ros/humble/include/librealsense2/hpp/rs_record_playback.hpp \
+ /opt/ros/humble/include/librealsense2/hpp/rs_device.hpp \
+ /opt/ros/humble/include/librealsense2/hpp/rs_sensor.hpp \
+ /opt/ros/humble/include/librealsense2/hpp/rs_frame.hpp \
+ /opt/ros/humble/include/librealsense2/hpp/rs_processing.hpp \
+ /opt/ros/humble/include/librealsense2/hpp/rs_options.hpp \
+ /opt/ros/humble/include/librealsense2/h/rs_types.h \
  /usr/include/c++/11/cstring /usr/include/string.h /usr/include/strings.h \
  /usr/include/x86_64-linux-gnu/bits/strings_fortified.h \
  /usr/include/x86_64-linux-gnu/bits/string_fortified.h \
- /usr/local/include/librealsense2/hpp/rs_device.hpp \
- /usr/local/include/librealsense2/hpp/rs_frame.hpp \
- /usr/local/include/librealsense2/hpp/rs_processing.hpp \
- /usr/local/include/librealsense2/hpp/rs_record_playback.hpp \
- /usr/local/include/librealsense2/hpp/rs_sensor.hpp \
- /usr/local/include/librealsense2/hpp/rs_pipeline.hpp \
- /usr/local/include/librealsense2/hpp/rs_context.hpp \
+ /opt/ros/humble/include/librealsense2/hpp/rs_device.hpp \
+ /opt/ros/humble/include/librealsense2/hpp/rs_frame.hpp \
+ /opt/ros/humble/include/librealsense2/hpp/rs_processing.hpp \
+ /opt/ros/humble/include/librealsense2/hpp/rs_record_playback.hpp \
+ /opt/ros/humble/include/librealsense2/hpp/rs_sensor.hpp \
+ /opt/ros/humble/include/librealsense2/hpp/rs_pipeline.hpp \
+ /opt/ros/humble/include/librealsense2/hpp/rs_context.hpp \
  /opt/ros/humble/include/rclcpp/rclcpp/rclcpp.hpp \
  /usr/include/c++/11/csignal /usr/include/signal.h \
  /usr/include/x86_64-linux-gnu/bits/signum-generic.h \
@@ -669,7 +669,7 @@ CMakeFiles/realsense2_camera.dir/src/sensor_params.cpp.o: \
  /opt/ros/humble/include/rclcpp/rclcpp/wait_set_template.hpp \
  /home/matt/Desktop/luna/src/realsense-ros/realsense2_camera/include/dynamic_params.h \
  /home/matt/Desktop/luna/src/realsense-ros/realsense2_camera/include/ros_utils.h \
- /usr/local/include/librealsense2/rsutil.h \
+ /opt/ros/humble/include/librealsense2/rsutil.h \
  /home/matt/Desktop/luna/src/realsense-ros/realsense2_camera/include/constants.h \
  /usr/include/c++/11/deque /usr/include/c++/11/bits/stl_deque.h \
  /usr/include/c++/11/bits/deque.tcc \

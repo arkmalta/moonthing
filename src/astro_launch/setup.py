@@ -40,6 +40,7 @@ setup(
             'beacon_localization = astro_launch.beacon_localization:main',
             'localization_testing = astro_launch.localization_testing:main',
             'movavg_beac_loc = astro_launch.movavg_beac_loc:main',
+            'ewma_beac_loc = astro_launch.ewma_beac_loc:main',
         ],
     },
 )

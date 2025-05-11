@@ -9,7 +9,7 @@ class OpcUaClientNode(Node):
         super().__init__('opcua_client')
        
         # Set up OPC UA connection
-        self.client = Client("opc.tcp://192.168.50.2:49580")
+        self.client = Client("opc.tcp://192.168.50.3:49580")
 
 
         #Try security things to see if they work
@@ -48,6 +48,7 @@ class OpcUaClientNode(Node):
         self.node_pi_command    = self.client.get_node("ns=2;s=OPCVariables.O_P_PiCommand")
         self.node_command_vel   = self.client.get_node("ns=2;s=OPCVariables.O_P_CommandVel")
         self.node_complete_task = self.client.get_node("ns=2;s=OPCVariables.O_P_CompleteTask")
+        #self.node_servo_up = self.client.get_node("ns=2;s=OPCVariables.O_P_ServoUp")
 
         # -------------------------
         # Publishers (reading from OPC UA, publishing to ROS)
@@ -68,6 +69,13 @@ class OpcUaClientNode(Node):
             self.write_pi_command,
             10
         )
+
+        # self.servo_up_sub = self.create_subscription(
+        #     Int32,
+        #     'servo_up',
+        #     self.write_servo_up,
+        #     10
+        # )
         self.command_vel_sub = self.create_subscription(
             Float32MultiArray,
             'command_velocity',
@@ -186,6 +194,19 @@ class OpcUaClientNode(Node):
             self.get_logger().info(f"Sent Complete Task to OPC UA: {msg.data}")
         except Exception as e:
             self.get_logger().error(f"Failed to write Complete Task: {e}")
+
+    # def write_servo_up(self, msg: Int32):
+    #     """
+    #     Writes the servo-up command to OPCVariables.O_P_ServoUp.
+    #     Expect an Int32 on /servo_up indicating how far to move the servo.
+    #     """
+    #     try:
+    #         variant = ua.Variant(msg.data, ua.VariantType.Int32)
+    #         self.node_servo_up.set_value(variant)
+    #         self.get_logger().info(f"Sent ServoUp to OPC UA: {msg.data}")
+    #     except Exception as e:
+    #         self.get_logger().error(f"Failed to write ServoUp: {e}")
+
 
     def destroy_node(self):
         """Cleanly disconnect from the OPC UA server upon node shutdown."""

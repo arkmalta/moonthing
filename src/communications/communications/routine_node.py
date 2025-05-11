@@ -1,197 +1,328 @@
-import rclpy
-from rclpy.node import Node
-from std_msgs.msg import Int32, String, Float32MultiArray
-from nav2_msgs.action import NavigateToPose
-from rclpy.action import ActionClient
-from geometry_msgs.msg import PoseStamped, Quaternion
+#!/usr/bin/env python3
 import math
 
-# --- States ---
-STATE_MANUAL = 'MANUAL'
-STATE_WAITING = 'WAITING_ON_COMMAND'
-STATE_NAV1 = 'NAVI_1'
-STATE_EXCA = 'EXCA'
-STATE_NAV2 = 'NAVI_2'
-STATE_DEPO = 'DEPO'
-STATE_DETECT_REG = 'DETECT_REG'
+import rclpy
+from rclpy.node import Node
+from rclpy.action import ActionClient
+from std_msgs.msg import Int32, Bool
+from nav2_msgs.action import NavigateToPose
+from rclpy.duration import Duration
+from geometry_msgs.msg import PoseStamped, Quaternion
 
-# --- OPC UA Status Codes ---
+# OPC-UA Status Codes
 STATUS_NOT_STARTED = 0
-STATUS_ACK = 10
-STATUS_STARTED = 20
-STATUS_FINISHED = 30
-STATUS_ERROR = 99
+STATUS_ACK         = 10
+STATUS_STARTED     = 20
+STATUS_FINISHED    = 30
+STATUS_ERROR       = 99
 
-# --- Pi Commands ---
+# PiCommand codes
 CMD_NAVI = 10
 CMD_EXCA = 20
 CMD_DEPO = 30
-CMD_ERROR = 99
+
+# Sub-state machine
+SUBSTATES = {
+    'IDLE':         0,
+    'WAIT_IDLE':    1,
+    'SEND_CMD':     2,
+    'WAIT_ACK':     3,
+    'WAIT_STARTED': 4,
+    'EXECUTING':    5,
+    'COMPLETING':   6,
+    'EYES_ON':   7,
+    'EYES_WAIT': 8,
+}
+
+class Task:
+    NAV        = 'nav'     
+    NAV_EYES   = 'nav_eyes'  
+    EXCA = 'exca'
+    DEPO = 'depo'
+
+    def __init__(self, ttype, waypoints=None):
+        self.type      = ttype
+        self.waypoints = waypoints or []
+        self.wp_index  = 0
+
 
 class RoutineNode(Node):
     def __init__(self):
         super().__init__('routine_node')
-        self.state = STATE_WAITING
-        self.nav_to_pose_client = ActionClient(self, NavigateToPose, 'navigate_to_pose')
-        self.nav_goal_active = False
-        self.nav_goal_done = False
-        self.nav_success = False
+        self.grid_pub = self.create_publisher(Bool, '/grid_publish_enable', 10)
 
+        # Task queue + tracking
+        self.tasks            = []
+        self.current_task     = None
+        self.substate         = SUBSTATES['IDLE']
+        self.task_retries     = 0
+
+        # OPC-UA statuses
         self.navigation_status = STATUS_NOT_STARTED
         self.excavation_status = STATUS_NOT_STARTED
         self.deposition_status = STATUS_NOT_STARTED
-        self.automation_state = ''
 
-        # Subscriptions
-        self.create_subscription(Int32, 'navigation_status', self.navi_status_callback, 10)
-        self.create_subscription(Int32, 'excavation_status', self.exca_status_callback, 10)
-        self.create_subscription(Int32, 'deposition_status', self.depo_status_callback, 10)
-        self.create_subscription(String, 'automation_state', self.auto_state_callback, 10)
+        # Nav2 action client
+        self.nav_client = ActionClient(self, NavigateToPose, 'navigate_to_pose')
+        if not self.nav_client.wait_for_server(timeout_sec=5.0):
+            self.get_logger().error("Nav2 server unavailable!")
+            raise RuntimeError("Navigation server connection failed")
 
-        # Publishers
-        self.pi_command_pub = self.create_publisher(Int32, 'pi_command', 10)
-        self.complete_task_pub = self.create_publisher(Int32, 'complete_task', 10)
+        # Publishers & subscribers
+        self.pi_cmd_pub   = self.create_publisher(Int32, 'pi_command',    10)
+        self.complete_pub = self.create_publisher(Int32, 'complete_task', 10)
 
-        self.timer = self.create_timer(1.0, self.state_machine_loop)
+        self.create_subscription(Int32, 'navigation_status', self._navi_cb, 10)
+        self.create_subscription(Int32, 'excavation_status', self._exca_cb, 10)
+        self.create_subscription(Int32, 'deposition_status', self._depo_cb, 10)
 
-    def navi_status_callback(self, msg):
-        self.navigation_status = msg.data
+        # Run at 2 Hz
+        self.create_timer(0.5, self._run_state_machine)
 
-    def exca_status_callback(self, msg):
-        self.excavation_status = msg.data
+    # ─── Public API ───────────────────────────────────────────────
+    def add_navigation(self, waypoints):
+        self.tasks.append(Task(Task.NAV, waypoints))
+    def add_excavation(self):
+        self.tasks.append(Task(Task.EXCA))
+    def add_deposition(self):
+        self.tasks.append(Task(Task.DEPO))
 
-    def depo_status_callback(self, msg):
-        self.deposition_status = msg.data
+    # ─── Core loop ────────────────────────────────────────────────
+    def _run_state_machine(self):
+        # 1) pick next task if idle
+        if self.substate == SUBSTATES['IDLE'] and not self.current_task and self.tasks:
+            self.current_task = self.tasks.pop(0)
+            self.substate     = SUBSTATES['WAIT_IDLE']
+            self.task_retries = 0
+            self.current_task.wp_index = 0
+            self.get_logger().info(f"→ Starting task '{self.current_task.type}'")
 
-    def auto_state_callback(self, msg):
-        self.automation_state = msg.data
-
-    def state_machine_loop(self):
-        if self.automation_state == "Manual":
-            self.state = STATE_MANUAL
-
-        if self.state == STATE_MANUAL:
+        # 2) if a task is active, dispatch
+        if not self.current_task:
             return
 
-        if self.state == STATE_WAITING:
-            self.send_complete_task(0)
-            self.send_pi_command(CMD_NAVI)
-            if self.navigation_status == STATUS_ACK:
-                self.send_complete_task(1)
-                self.state = STATE_NAV1
-
-        elif self.state == STATE_NAV1:
-            if not self.nav_goal_active and not self.nav_goal_done:
-                self.send_navigation_goal(1.35, 2.2, 0.0)
-            elif self.nav_goal_done:
-                if self.nav_success:
-                    self.send_complete_task(49)
-                    self.state = STATE_EXCA
-                else:
-                    self.state = STATE_WAITING
-
-        elif self.state == STATE_EXCA:
-            self.send_pi_command(CMD_EXCA)
-            if self.excavation_status == STATUS_ACK:
-                self.send_complete_task(1)
-            if self.excavation_status == STATUS_FINISHED:
-                self.send_complete_task(0)
-                self.send_pi_command(CMD_NAVI)
-                self.state = STATE_NAV2
-
-        elif self.state == STATE_NAV2:
-            if not self.nav_goal_active and not self.nav_goal_done:
-                self.send_navigation_goal(1.0, 2.0, 0.0)
-            elif self.nav_goal_done:
-                if self.nav_success:
-                    self.send_complete_task(49)
-                    self.state = STATE_DEPO
-                else:
-                    self.state = STATE_WAITING
-
-        elif self.state == STATE_DEPO:
-            self.send_pi_command(CMD_DEPO)
-            if self.deposition_status == STATUS_ACK:
-                self.send_complete_task(1)
-            if self.deposition_status == STATUS_FINISHED:
-                self.state = STATE_DETECT_REG
-
-        elif self.state == STATE_DETECT_REG:
-            self.get_logger().info("Detecting regolith... Done.")
-            self.state = STATE_WAITING
-
-    def send_pi_command(self, value):
-        msg = Int32()
-        msg.data = value
-        self.pi_command_pub.publish(msg)
-        self.get_logger().info(f"Sent PiCommand: {value}")
-
-    def send_complete_task(self, value):
-        msg = Int32()
-        msg.data = value
-        self.complete_task_pub.publish(msg)
-        self.get_logger().info(f"Sent CompleteTask: {value}")
-
-    def send_navigation_goal(self, x, y, theta):
-        if not self.nav_to_pose_client.wait_for_server(timeout_sec=5.0):
-            self.get_logger().error("NavigateToPose action server not available")
-            return
-
-        goal = NavigateToPose.Goal()
-        goal.pose.header.frame_id = "map"
-        goal.pose.header.stamp = self.get_clock().now().to_msg()
-        goal.pose.pose.position.x = x
-        goal.pose.pose.position.y = y
-
-        quat = Quaternion()
-        quat.z = math.sin(theta / 2.0)
-        quat.w = math.cos(theta / 2.0)
-        goal.pose.pose.orientation = quat
-
-        self.nav_goal_active = True
-        self.nav_goal_done = False
-        self.nav_success = False
-
-        self._send_goal_future = self.nav_to_pose_client.send_goal_async(
-            goal, feedback_callback=self.nav_feedback_callback)
-        self._send_goal_future.add_done_callback(self.nav_goal_response_callback)
-
-    def nav_goal_response_callback(self, future):
-        goal_handle = future.result()
-        if not goal_handle.accepted:
-            self.get_logger().error("Navigation goal was rejected")
-            self.nav_goal_done = True
-            self.nav_success = False
-            return
-
-        self.get_logger().info("Navigation goal accepted")
-        self._get_result_future = goal_handle.get_result_async()
-        self._get_result_future.add_done_callback(self.nav_result_callback)
-
-    def nav_result_callback(self, future):
-        status = future.result().status
-        if status == 4:
-            self.get_logger().info("Navigation succeeded")
-            self.nav_success = True
+        if self.current_task.type in (Task.NAV, Task.NAV_EYES):
+            self._handle_navigation()
+        elif self.current_task.type == Task.EXCA:
+            self._handle_excavation()
+        elif self.current_task.type == Task.DEPO:
+            self._handle_deposition()
         else:
-            self.get_logger().error(f"Navigation failed: status {status}")
-            self.nav_success = False
-        self.nav_goal_done = True
-        self.nav_goal_active = False
+            self._abort_task()
 
-    def nav_feedback_callback(self, msg):
-        pass
+    # ─── Navigation sub-state machine ────────────────────────────
+    def _handle_navigation(self):
+        st     = self.substate
+        status = self.navigation_status
+
+        if st == SUBSTATES['WAIT_IDLE']:
+            self._send_complete(0)     
+            if status == STATUS_NOT_STARTED:
+                self.substate = SUBSTATES['SEND_CMD']
+
+        elif st == SUBSTATES['SEND_CMD']:
+            self._send_complete(0)
+            self._send_pi(CMD_NAVI)
+            self.substate = SUBSTATES['WAIT_ACK']
+
+        elif st == SUBSTATES['WAIT_ACK']:
+            if status == STATUS_ACK:
+                self._send_complete(1)
+                self._send_pi(0)
+                self.substate = SUBSTATES['WAIT_STARTED']
+            elif status == STATUS_ERROR:
+                self._handle_failure()
+
+        elif st == SUBSTATES['WAIT_STARTED']:
+            if status == STATUS_STARTED:
+                # With-eyes branch?
+                if self.current_task.type == Task.NAV_EYES:
+                    self.grid_pub.publish(Bool(data=True))     # enable scan
+                    self.eyes_off_time = self.get_clock().now() + Duration(seconds=5)
+                    self.substate = SUBSTATES['EYES_WAIT']
+                else:
+                    self._send_nav_goal()
+                    self.substate = SUBSTATES['EXECUTING']
+
+        elif st == SUBSTATES['EYES_WAIT']:
+            if self.get_clock().now() >= self.eyes_off_time:
+                self.grid_pub.publish(Bool(data=False))        # disable scan
+                self._send_nav_goal()
+                self.substate = SUBSTATES['EXECUTING']
+
+
+        elif st == SUBSTATES['EXECUTING']:
+            # wait for action callback
+            pass
+
+        elif st == SUBSTATES['COMPLETING']:
+            if status == STATUS_FINISHED:          # 30
+                self._send_complete(0)             # tell Rio we saw it
+            elif status == STATUS_NOT_STARTED:     # 0  (Rio has cleared)
+                self.current_task = None
+                self.substate     = SUBSTATES['IDLE']
+
+
+    # ─── Excavation (same pattern) ───────────────────────────────
+    def _handle_excavation(self):
+        st     = self.substate
+        status = self.excavation_status
+
+        if st == SUBSTATES['WAIT_IDLE']:
+            self._send_complete(0)
+            if status == STATUS_NOT_STARTED:
+                self.substate = SUBSTATES['SEND_CMD']
+
+        elif st == SUBSTATES['SEND_CMD']:
+            self._send_complete(0)
+            self._send_pi(CMD_EXCA)
+            self.substate = SUBSTATES['WAIT_ACK']
+
+        elif st == SUBSTATES['WAIT_ACK']:
+            if status == STATUS_ACK:
+                self._send_complete(1)
+                self._send_pi(0)
+                self.substate = SUBSTATES['EXECUTING']
+            elif status == STATUS_ERROR:
+                self._handle_failure()
+
+        elif st == SUBSTATES['EXECUTING']:
+            if status == STATUS_FINISHED:
+                self.substate = SUBSTATES['COMPLETING']
+
+        elif st == SUBSTATES['COMPLETING']:
+            if status == STATUS_FINISHED:          # 30
+                self._send_complete(0)             # tell Rio we saw it
+            elif status == STATUS_NOT_STARTED:     # 0  (Rio has cleared)
+                self.current_task = None
+                self.substate     = SUBSTATES['IDLE']
+
+
+    # ─── Deposition (same pattern) ───────────────────────────────
+    def _handle_deposition(self):
+        st     = self.substate
+        status = self.deposition_status
+
+        if st == SUBSTATES['WAIT_IDLE']:
+            self._send_complete(0)
+            if status == STATUS_NOT_STARTED:
+                self.substate = SUBSTATES['SEND_CMD']
+
+        elif st == SUBSTATES['SEND_CMD']:
+            self._send_complete(0)
+            self._send_pi(CMD_DEPO)
+            self.substate = SUBSTATES['WAIT_ACK']
+
+        elif st == SUBSTATES['WAIT_ACK']:
+            if status == STATUS_ACK:
+                self._send_complete(1)
+                self._send_pi(0)
+                self.substate = SUBSTATES['EXECUTING']
+            elif status == STATUS_ERROR:
+                self._handle_failure()
+
+        elif st == SUBSTATES['EXECUTING']:
+            if status == STATUS_FINISHED:
+                self.substate = SUBSTATES['COMPLETING']
+
+        elif st == SUBSTATES['COMPLETING']:
+            if status == STATUS_FINISHED:          # 30
+                self._send_complete(0)             # tell Rio we saw it
+            elif status == STATUS_NOT_STARTED:     # 0  (Rio has cleared)
+                self.current_task = None
+                self.substate     = SUBSTATES['IDLE']
+
+    # ─── Nav2 plumbing ──────────────────────────────────────────
+    def _send_nav_goal(self):
+        t = self.current_task
+        x,y,th = t.waypoints[t.wp_index]
+        goal = NavigateToPose.Goal()
+        pst  = PoseStamped()
+        pst.header.frame_id = 'map'
+        pst.header.stamp    = self.get_clock().now().to_msg()
+        pst.pose.position.x = x
+        pst.pose.position.y = y
+        q = Quaternion()
+        q.z = math.sin(th/2.0)
+        q.w = math.cos(th/2.0)
+        pst.pose.orientation = q
+        goal.pose = pst
+
+        fut = self.nav_client.send_goal_async(goal)
+        fut.add_done_callback(self._nav_response)
+
+    def _nav_response(self, future):
+        handle = future.result()
+        if not handle.accepted:
+            self.get_logger().error("Nav goal rejected")
+            self._handle_failure()
+            return
+        handle.get_result_async().add_done_callback(self._nav_result)
+
+    def _nav_result(self, future):
+        status = future.result().status
+        if status == 4:  # SUCCEEDED
+            t = self.current_task
+            if t.wp_index < len(t.waypoints)-1:
+                t.wp_index += 1
+                self._send_nav_goal()
+            else:
+                self._send_complete(49)
+                self.substate = SUBSTATES['COMPLETING']
+        else:
+            self.get_logger().error(f"Nav2 failed (status {status})")
+            self._handle_failure()
+
+    # ─── Error / retry / abort ───────────────────────────────────
+    def _handle_failure(self):
+        if self.task_retries < 3:
+            self.task_retries += 1
+            self.get_logger().warn(f"Retry {self.task_retries}/3")
+            self.substate = SUBSTATES['WAIT_IDLE']
+        else:
+            self.get_logger().error("Too many failures, aborting task")
+            self._abort_task()
+
+    def _abort_task(self):
+        self._send_pi(0)
+        self._send_complete(0)
+        self.current_task = None
+        self.substate     = SUBSTATES['IDLE']
+        self.task_retries = 0
+
+    # ─── ROS callbacks ───────────────────────────────────────────
+    def _navi_cb(self, msg): self.navigation_status = msg.data
+    def _exca_cb(self, msg): self.excavation_status = msg.data
+    def _depo_cb(self, msg): self.deposition_status = msg.data
+
+    # ─── Helpers ─────────────────────────────────────────────────
+    def _send_pi(self, v):
+        self.pi_cmd_pub.publish(Int32(data=v))
+    def _send_complete(self, v):
+        self.complete_pub.publish(Int32(data=v))
+    def add_navigation_with_eyes(self, waypoints):
+        self.tasks.append(Task(Task.NAV_EYES, waypoints))
+
+
 
 def main(args=None):
     rclpy.init(args=args)
     node = RoutineNode()
+
+    # build your routine:
+    node.add_navigation([(1.35,2.2,0.0), (1.0,2.0,0.0)])
+    node.add_excavation()
+    node.add_navigation([(5.0,1.0,1.57)])
+    node.add_deposition()
+    node.add_navigation([(1.35, 2.2, 0.0)])
+    node.add_navigation_with_eyes([(0.5, 1.2, 1.5)])
+
+
     try:
         rclpy.spin(node)
-    except KeyboardInterrupt:
-        pass
     finally:
         node.destroy_node()
         rclpy.shutdown()
 
-if __name__ == '__main__':
+if __name__=='__main__':
     main()

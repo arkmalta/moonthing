@@ -4,5 +4,5 @@ origin: [0.0, 0.0, 0.0]         # The [x, y] position and yaw (rotation) of the 
 negate: 0                     # Indicates whether to invert the pixel values. 0 = no inversion.
 occupied_thresh: 0.65           # Threshold above which a pixel is considered an obstacle.
 free_thresh: 0.196              # Threshold below which a pixel is considered free space.
-# the png above is just a white pixel
+# the png above is file that shows  a 2.5 x 7 meters accurately
 

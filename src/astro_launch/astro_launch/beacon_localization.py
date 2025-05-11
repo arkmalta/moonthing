@@ -157,9 +157,11 @@ class RoverLocalization(Node):
                 return  # Skip updating topics if data is invalid.
 
             # Compute the midpoint between the two tag positions.
-            mid_x = (back_pos[0] + front_pos[0]) / 2.0
-            mid_y = (back_pos[1] + front_pos[1]) / 2.0
-            mid_z = (back_pos[2] + front_pos[2]) / 2.0
+            mid_x = ((back_pos[0] + front_pos[0]) / 2.0)
+            mid_y = ((back_pos[1] + front_pos[1]) / 2.0)
+            mid_z = ((back_pos[2] + front_pos[2]) / 2.0)
+
+
 
             # Compute the vector from the back tag (B0) to the front tag (B1).
             dx = front_pos[0] - back_pos[0]
@@ -167,6 +169,12 @@ class RoverLocalization(Node):
             original_heading = math.atan2(dy, dx)
             # Adjust the heading 45° to the right (clockwise rotation by 45°).
             adjusted_heading = original_heading - (math.pi / 4)
+
+            #Base-Link Transform Adjustment
+            hyp = 0.2
+            mid_x = ((back_pos[0] + front_pos[0]) / 2.0) + (hyp * math.cos(adjusted_heading))
+            mid_y = ((back_pos[1] + front_pos[1]) / 2.0) + (hyp * math.sin(adjusted_heading))
+            mid_z = ((back_pos[2] + front_pos[2]) / 2.0) * 0
 
             # Log the computed midpoint and adjusted heading.
             self.get_logger().info(
@@ -216,8 +224,8 @@ class RoverLocalization(Node):
             # Publish TF transform from odom → base_link
             t = TransformStamped()
             t.header.stamp = self.get_clock().now().to_msg()
-            t.header.frame_id = "map" #"odom"
-            t.child_frame_id = "tag_link"
+            t.header.frame_id = "odom" #map
+            t.child_frame_id = "base_link"
             t.transform.translation.x = mid_x
             t.transform.translation.y = mid_y
             t.transform.translation.z = mid_z  # assuming flat surface

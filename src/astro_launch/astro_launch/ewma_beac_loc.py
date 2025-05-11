@@ -16,11 +16,13 @@ class RoverLocalization(Node):
     def __init__(self):
         super().__init__('rover_localization')
 
-        self.window_size = 7
-        # keep the last window_size midpoints as (x, y, z)
-        self.midpoints = deque(maxlen=self.window_size)
-        # keep the last window_size headings (radians)
-        self.headings  = deque(maxlen=self.window_size)
+        # EWMA smoothing factor: how much weight to give the newest measurement
+        self.declare_parameter('ewma_alpha', 0.15)         # you can tweak this at runtime
+        self.alpha = self.get_parameter('ewma_alpha').value
+
+        # EWMA state: None until the first measurement arrives
+        self.ewma_position = None    # will hold (x,y,z)
+        self.ewma_heading  = None    # in radians
 
 
         self.tf_broadcaster = TransformBroadcaster(self)
@@ -129,7 +131,7 @@ class RoverLocalization(Node):
             self.get_logger().warn(f"Error parsing position data: {e}")
             return None
 
-    def read_serial(self, serial_conn):
+    def read_serial(self, serial_conn, port):
         """
         Read one line from the given serial connection.
         Parses the line and returns the data (tag_id, x, y, z) if successful.
@@ -210,24 +212,37 @@ class RoverLocalization(Node):
             # Adjust the heading 45° to the right (clockwise rotation by 45°).
             adjusted_heading = original_heading - (math.pi / 4)
 
-			self.midpoints.append((mid_x, mid_y, mid_z))
-			self.headings.append(adjusted_heading)
+            # === initialize EWMA on first sample ===
+            if self.ewma_position is None:
+                self.ewma_position = (mid_x, mid_y, mid_z)
+                self.ewma_heading  = adjusted_heading
+            else:
+                # EWMA on position
+                ex, ey, ez = self.ewma_position
+                ex = self.alpha*mid_x + (1-self.alpha)*ex
+                ey = self.alpha*mid_y + (1-self.alpha)*ey
+                ez = self.alpha*mid_z + (1-self.alpha)*ez
+                self.ewma_position = (ex, ey, ez)
 
-			avg_x = sum(p[0] for p in self.midpoints) / len(self.midpoints)
-			avg_y = sum(p[1] for p in self.midpoints) / len(self.midpoints)
-			avg_z = sum(p[2] for p in self.midpoints) / len(self.midpoints)
+                # EWMA on heading via sin/cos to avoid wrap issues
+                sh = math.sin(self.ewma_heading)
+                ch = math.cos(self.ewma_heading)
+                s_new = math.sin(adjusted_heading)
+                c_new = math.cos(adjusted_heading)
+                s = self.alpha*s_new + (1-self.alpha)*sh
+                c = self.alpha*c_new + (1-self.alpha)*ch
+                self.ewma_heading = math.atan2(s, c)
 
-			sin_sum = sum(math.sin(h) for h in self.headings)
-			cos_sum = sum(math.cos(h) for h in self.headings)
-			avg_heading = math.atan2(sin_sum/len(self.headings),
-                                     cos_sum/len(self.headings))
+            # rename for the rest of your code:
+            avg_x, avg_y, avg_z = self.ewma_position
+            avg_heading        = self.ewma_heading
 
 			
 
-			# log moving-average values
+            # log moving-average values
             self.get_logger().info(
-                f"Avg Midpoint: x={avg_x:.2f}, y={avg_y:.2f}, z={avg_z:.2f}; "
-                f"Avg Heading: {avg_heading:.2f} rad"
+                f"EWMA Midpoint: x={avg_x:.2f}, y={avg_y:.2f}, z={avg_z:.2f}; " #z should be avg_z
+                f"EWMA Heading: {avg_heading:.2f} rad"
             )
 
             # Build a 4x4 homogeneous transformation matrix representing the pose.
@@ -238,7 +253,7 @@ class RoverLocalization(Node):
                 sin_a,  cos_a, 0, avg_y,
                 0,      0,     1, avg_z,
                 0,      0,     0, 1
-            ]
+            ] 
             # Ensure each value is a float.
             matrix_data = [float(value) for value in matrix_data]
             matrix_msg = Float64MultiArray()
@@ -272,8 +287,8 @@ class RoverLocalization(Node):
             # Publish TF transform from odom → base_link
             t = TransformStamped()
             t.header.stamp = self.get_clock().now().to_msg()
-            t.header.frame_id = "map" #"odom"
-            t.child_frame_id = "tag_link"
+            t.header.frame_id = "odom" #"map"
+            t.child_frame_id = "tag_link" # "base_link"
             t.transform.translation.x = avg_x
             t.transform.translation.y = avg_y
             t.transform.translation.z = avg_z  # assuming flat surface

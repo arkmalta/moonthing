@@ -89,12 +89,16 @@ def generate_launch_description():
         output='screen',
         parameters=[nav2_params]
     )
+
     controller_server = Node(
         package='nav2_controller',
         executable='controller_server',
         output='screen',
         parameters=[nav2_params]
     )
+
+
+
     lifecycle_manager = Node(
         package='nav2_lifecycle_manager',
         executable='lifecycle_manager',

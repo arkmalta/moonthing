@@ -1,123 +1,117 @@
-# =====================
-# NAV2 PARAMETERS FILE
-# =====================
-# This file configures  core Nav2 nodes
-# to use smac for planning and regulated pure pursuit for control.
-# disable internal costmap since it should come from pi2
-
-# --- Behavior Tree Navigator (handles logic like: plan → follow → recover) ---
 bt_navigator:
   ros__parameters:
-    use_sim_time: false  # True if using simulation like Gazebo; here we use real time
+    use_sim_time: false
     default_bt_xml_filename: "/home/matt/Desktop/luna/src/astro_launch/behavior_trees/navigate_to_pose_w_replanning_and_recovery.xml"
     default_nav_to_pose_bt_xml: "/home/matt/Desktop/luna/src/astro_launch/behavior_trees/navigate_to_pose_w_replanning_and_recovery.xml"
     default_nav_through_poses_bt_xml: "/home/matt/Desktop/luna/src/astro_launch/behavior_trees/navigate_through_poses_w_replanning_and_recovery.xml"
-   
-    global_frame: "map"  # The fixed world reference frame
-    robot_base_frame: "base_link"  # The frame of the robot (usually "base_link")
-    #odom_topic: "odom"  # Odometry topic, can come from encoders, IMU fusion, etc.
-    transform_tolerance: 0.5  # Max tolerance (seconds) for transform lag
+    global_frame: "map"
+    robot_base_frame: "base_link"
+    transform_tolerance: 0.5
 
-# --- Planner Server (Global Path Planning) ---
 planner_server:
   ros__parameters:
     use_sim_time: false
-    expected_planner_frequency: 2.0  # How often to expect a new plan (Hz)
-    planner_plugins: ["GridBased"]  # Plugins to load for planning
+    expected_planner_frequency: 0.25
+    planner_plugins: ["GridBased"]
     GridBased:
-      plugin: "nav2_smac_planner/SmacPlannerHybrid"  # Hybrid-A* plugin for rover navigation
-      tolerance: 0.5  # (Meters) Acceptable tolerance to reach the goal. In other words, how close to the goal is "good enough"
-      downsample_costmap: false  # Keep full resolution of costmap
-      angle_quantization_bins: 72  # 360 / 5 degrees. More = finer heading resolution
-      analytic_expansion_max_length: 3.0  # Dubins-style expansion for smoothing (meters)
-      minimum_turning_radius: 0.3  # Min radius for arc turns, tweak for skid steer feel
-      motion_model: "REEDS_SHEPP"  # Choose DUBIN or REEDS_SHEPP; 
-      allow_unknown: true  # Allow planning through unknown areas
+      plugin: "nav2_smac_planner/SmacPlannerHybrid"
+      tolerance: 1.0
+      downsample_costmap: false
+      angle_quantization_bins: 72
+      analytic_expansion_max_length: 3.0
+      minimum_turning_radius: 1.2
+      motion_model_for_search: "REEDS_SHEPP"
+      allow_backwards: true
+      reverse_penalty: 1.1
+      change_penalty: 0.0
+      non_straight_penalty: 1.0
+      allow_unknown: false
+      allow_reverse: true
 
-# --- Controller Server (Local Path Following) ---
-controller_server:
-  ros__parameters:
-    use_sim_time: false
-    controller_frequency: 10.0  # Command output frequency (Hz)
-    use_velocity_scaled_lookahead_dist: true  # Lookahead scales with current speed
-    controller_plugins: ["FollowPath"]
-    FollowPath:
-      plugin: "nav2_regulated_pure_pursuit_controller::RegulatedPurePursuitController"
-      desired_linear_vel: 0.4  # Target cruising speed (m/s)
-      max_linear_accel: 2.0  # Max acceleration (m/s^2)
-      min_lookahead_dist: 0.3  # Minimum distance ahead to follow path
-      lookahead_dist: 0.6  # Base lookahead distance
-      lookahead_time: 1.5  # Lookahead time for dynamic adjustment
-      transform_tolerance: 0.3  # TF lookup tolerance
-      use_rotate_to_heading: false  # Don’t stop and rotate before moving forward
-      max_angular_accel: 3.2  # Limit angular acceleration for smoother turns
-      use_interpolation: true  # Smoother path tracking
-
-# -------------------------
-# COSTMAPS REMOVED
-# -------------------------
-# The internal costmaps are excluded because costmaps come from Luna
-# Publish to topics like `/global_costmap/costmap_raw` or `/local_costmap/costmap_raw`
 
 
 
 global_costmap:
+  global_costmap:
+    ros__parameters:
+      update_frequency: 1.0
+      publish_frequency: 2.0
+      footprint_clearing_enabled: true
+      use_sim_time: false
+      robot_base_frame: "base_link"
+      global_frame: "map"
+      robot_radius: 0.75 
+      footprint: "[[0.69, 0.37], [0.69, -0.37], [-0.69, -0.37], [-0.69, 0.37]]"
+      plugins: ["static_layer", "obstacle_layer", "inflation_layer"]
+      static_layer:
+        map_subscribe_transient_local: True
+        plugin: "nav2_costmap_2d::StaticLayer"
+        enabled: true
+        map_topic: "/map"
+        subscribe_to_updates: true
+      obstacle_layer:
+        plugin: "nav2_costmap_2d::ObstacleLayer"
+        enabled: true
+        observation_sources: scan
+        footprint_clearing_enabled: false
+        max_obstacle_height: 0.5
+        combination_method: 1
+        observation_persistence: 0.0
+        scan:
+          sensor_frame: "camera_link"
+          topic: /grid_cloud
+          max_obstacle_height: 0.5
+          clearing: true
+          marking: true
+          data_type: "PointCloud2"
+          raytrace_max_range: 2.5  # how far to clear free space
+          raytrace_min_range: 0.0
+      inflation_layer:
+        plugin: "nav2_costmap_2d::InflationLayer"
+        inflation_radius: 0.4
+
+controller_server:
   ros__parameters:
     use_sim_time: false
-    robot_base_frame: "base_link"
-    global_frame: "map"
-    plugins: ["static_layer", "obstacle_layer", "inflation_layer"]
+    controller_frequency: 5.0
+    use_velocity_scaled_lookahead_dist: true
+    controller_plugins: ["FollowPath"]
+    FollowPath:
+      plugin: "nav2_regulated_pure_pursuit_controller::RegulatedPurePursuitController"
+      use_rotate_to_heading: false
+      desired_linear_vel: 0.5
+      max_linear_accel: 1.5
+      min_lookahead_dist: 0.3
+      lookahead_dist: 0.8
+      lookahead_time: 1.2
+      min_linear_vel: -0.2
+      allow_backwards: true
+      transform_tolerance: 0.3
+      use_rotate_to_heading: false
+      max_angular_accel: 0.3
+      use_interpolation: true
+      allow_reversing: true
 
 
-    static_layer:
-      enabled: true
-      map_topic: "/map"
-      subscribe_to_updates: false    # true if you want dynamic map updates from map_server
-      # transform_tolerance, footprint_clearing_enabled, etc. can be set as needed
-
-
-    obstacle_layer:
-      enabled: true
-      observation_sources: camera_obstacles
-      camera_obstacles:
-        topic: /occupancy_grid
-        data_type: "nav_msgs/msg/OccupancyGrid"
-        clearing: false
-        marking: true
-    inflation_layer:
-      inflation_radius: 0.1
 
 local_costmap:
-  ros__parameters:
-    use_sim_time: false
-    robot_base_frame: "base_link"
-    global_frame: "map"
-    plugins: ["static_layer","obstacle_layer", "inflation_layer"]
-    
-    static_layer:
-      enabled: true
-      map_topic: "/map"
-      subscribe_to_updates: false    # true if you want dynamic map updates from map_server
-      # transform_tolerance, footprint_clearing_enabled, etc. can be set as needed
-    
-    obstacle_layer:
-      enabled: true
-      observation_sources: camera_obstacles
-      camera_obstacles:
-        topic: /occupancy_grid
-        data_type: "nav_msgs/msg/OccupancyGrid"
-    inflation_layer:
-      inflation_radius: 0.5
+  local_costmap:
+    ros__parameters:
+      update_frequency: 10.0
+      publish_frequency: 5.0
+      use_sim_time: false
+      robot_base_frame: "base_link"
+      global_frame: "odom"
+      rolling_window: true
 
 
-    # lifecycle_manager brings up and tears down all nav2 components
 lifecycle_manager:
   ros__parameters:
-    use_sim_time: false  # Use wall-clock time
-    autostart: true  # Start everything automatically
+    use_sim_time: false
+    autostart: true
     node_names:
       - map_server
-      - controller_server  # Controller node
-      - planner_server     # Planner node
-      - bt_navigator       # Behavior tree node
-      - behavior_server    
+      - controller_server
+      - planner_server
+      - bt_navigator
+      - behavior_server
